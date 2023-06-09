@@ -1,6 +1,7 @@
 import React from 'react';
 import './App.css';
 import * as BABYLON from 'babylonjs';
+import 'babylonjs-loaders';
 import Stats from 'stats-js';
 
 var statsFPS = new Stats();
@@ -46,33 +47,111 @@ function App() {
       const ground = new BABYLON.MeshBuilder.CreateGround('ground', { width: 50, height: 50 }, scene);
       ground.checkCollisions = true;
 
+      // Keyboard events
+      var inputMap = {};
+      scene.actionManager = new BABYLON.ActionManager(scene);
+      scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyDownTrigger, function (evt) {
+        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type == "keydown";
+      }));
+      scene.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnKeyUpTrigger, function (evt) {
+        inputMap[evt.sourceEvent.key] = evt.sourceEvent.type == "keydown";
+      }));
+
       loadAvatar();
 
       function loadAvatar() {
-        BABYLON.SceneLoader.ImportMesh("", "assets/", "dummy3.babylon", scene, function (newMeshes, particleSystems, skeletons, animationGroups) {
-          var skeleton = skeletons[0];
+        BABYLON.SceneLoader.ImportMesh("", "assets/", "ybot.gltf", scene, function (newMeshes, particleSystems, skeletons, animationGroups) {
 
           shadowGenerator.addShadowCaster(scene.meshes[0], true);
           for (var index = 0; index < newMeshes.length; index++) {
             newMeshes[index].receiveShadows = false;;
           }
 
-          var avatar = newMeshes[0];
+          var skeleton = skeletons[0];
+          var hero = newMeshes[0];
+          var animating = true;
+
+          //Hero character variables 
+          var heroSpeed = 0.03;
+          var heroSpeedBackwards = 0.01;
+          var heroRotationSpeed = 0.1;
+
+          const walkAnim = scene.getAnimationGroupByName("walk");
+          const walkBackAnim = scene.getAnimationGroupByName("walkBack");
+          const idleAnim = scene.getAnimationGroupByName("idle");
+
+          function followBehindMesh() {
+            camera.target = new BABYLON.Vector3(hero.position.x, hero.position.y + 1.5, hero.position.z);
+            camera.radius = 3;
+          }
+  
+          scene.registerBeforeRender(followBehindMesh);
+  
+
+          scene.onBeforeRenderObservable.add(() => {
+            var keydown = false;
+            //Manage the movements of the character (e.g. position, direction)
+            if (inputMap["w"]) {
+              hero.moveWithCollisions(hero.forward.scaleInPlace(heroSpeed));
+              keydown = true;
+            }
+            if (inputMap["s"]) {
+              hero.moveWithCollisions(hero.forward.scaleInPlace(-heroSpeedBackwards));
+              keydown = true;
+            }
+            if (inputMap["a"]) {
+              hero.rotate(BABYLON.Vector3.Up(), -heroRotationSpeed);
+              keydown = true;
+            }
+            if (inputMap["d"]) {
+              hero.rotate(BABYLON.Vector3.Up(), heroRotationSpeed);
+              keydown = true;
+            }
+            if (inputMap["b"]) {
+              keydown = true;
+            }
+
+            //Manage animations to be played  
+            if (keydown) {
+              if (!animating) {
+                animating = true;
+                if (inputMap["s"]) {
+                  //Walk backwards
+                  walkBackAnim.start(true, 1.0, walkBackAnim.from, walkBackAnim.to, false);
+                }
+                else {
+                  //Walk
+                  walkAnim.start(true, 1.0, walkAnim.from, walkAnim.to, false);
+                }
+              }
+            }
+            else {
+
+              if (animating) {
+                //Default animation is idle when no key is down     
+                idleAnim.start(true, 1.0, idleAnim.from, idleAnim.to, false);
+
+                //Stop all animations besides Idle Anim when no key is down
+                walkAnim.stop();
+                walkBackAnim.stop();
+
+                //Ensure animation are played only once per rendering loop
+                animating = false;
+              }
+            }
+          });
+
+          /* var avatar = newMeshes[0];
           avatar.position = new BABYLON.Vector3(0, 0, 0);
           avatar.rotation = new BABYLON.Vector3(0, Math.PI, 0);
           skeleton.animationPropertiesOverride = new BABYLON.AnimationPropertiesOverride();
           skeleton.animationPropertiesOverride.enableBlending = true;
           skeleton.animationPropertiesOverride.blendingSpeed = 0.05;
-          skeleton.animationPropertiesOverride.loopMode = 1;
+          skeleton.animationPropertiesOverride.loopMode = 1; */
 
-          var idleRange = skeleton.getAnimationRange("YBot_Idle");
-          var walkRange = skeleton.getAnimationRange("YBot_Walk");
-          var runRange = skeleton.getAnimationRange("YBot_Run");
-          var leftRange = skeleton.getAnimationRange("YBot_LeftStrafeWalk");
-          var rightRange = skeleton.getAnimationRange("YBot_RightStrafeWalk");
 
           // IDLE
-          if (idleRange) scene.beginAnimation(skeleton, idleRange.from, idleRange.to, true);
+          // if (idleRange) scene.beginAnimation(skeleton, idleRange.from, idleRange.to, true);
         });
       }
 
